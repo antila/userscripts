@@ -11,6 +11,18 @@ archive pages based on whether you've played them:
 Works on all four archive tabs: Classic (`/archive`), One Frame, Titleshot and
 Poster.
 
+A small chart button in the bottom-right corner opens a panel with:
+
+- **Statistics**, for all modes together or one at a time: played, won, lost,
+  win rate, W/L ratio, the average clue you win on, current/best win streak
+  (consecutive day numbers), and a "solved on clue" distribution like framed's
+  own.
+- **Import / export**, for moving your history to another browser: download
+  (or copy) a JSON file, then load it on the other side and **Merge** (keep
+  what's there, add what's missing, finish days that were only "started") or
+  **Replace**. The export also carries framed's own `title-log`, so amber days
+  and older wins' clue numbers come along too.
+
 ## Install
 
 1. Install a userscript manager in Firefox, e.g.
@@ -40,6 +52,9 @@ So the script builds its own history, polling every 750 ms:
 - **Amber (started)** comes from framed's own `title-log`: any used guess slot
   marks the day as attempted, even for plays from before the script was
   installed.
+- **Winning clue**: daily wins take it from `gameData.currentGuess`; other wins
+  get it backfilled from `title-log` (position of the last used slot) and
+  stored under `steps` in the same record.
 - On the archive pages it colors the day links from that record. Polling also
   handles Next.js client-side navigation, so colors survive tab switches
   without a page reload.
@@ -69,8 +84,12 @@ So the script builds its own history, polling every 750 ms:
   stored the outcome.
 - The record lives in localStorage for framed.wtf, which never expires but is
   deleted if you clear cookies/site data for the site (this would also wipe
-  your framed stats). Back it up from the devtools console with
-  `copy(localStorage.getItem('framed-archive-played-v1'))`.
+  your framed stats). Back it up with **Download JSON** in the panel. (Older
+  console backups of `framed-archive-played-v1` can be imported too.)
+- **Clue numbers** (for the average and distribution) are recorded from the
+  daily game's state, or else from framed's `title-log` (the last guess slot
+  used). Wins that have neither are counted as wins but left out of the
+  average.
 
 ## Tweaks
 
