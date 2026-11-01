@@ -1,12 +1,37 @@
 # Flickle Tools
 
-Userscript for [flickle.co](https://www.flickle.co). For now it adds an
-**import / export** panel for moving your Flickle data between browsers or
-devices.
+Userscript for [flickle.co](https://www.flickle.co) that adds:
 
-A small upload-arrow button in the bottom-right corner opens the panel. It
-shows what this browser has (games finished per mode, watchlist size) and lets
-you:
+- a **fullscreen game layout**: the frame, the guess buttons and the input are
+  sized to fill the window, and the search suggestions open over the frame
+  instead of below the input;
+- an **import / export** panel for moving your Flickle data between browsers
+  or devices.
+
+A small settings button in the bottom-right corner opens the panel.
+
+## Fullscreen layout
+
+On by default; switch it off under **Layout** in the panel (remembered per
+browser). Flickle caps the game column at 42–56rem, so on a big screen the
+frame stays small and the input often ends up below the fold. The script
+instead measures what sits above the frame (header, Movies/TV tabs) and below
+it (frame buttons, progress bar, input), and makes the 16:9 frame as large as
+fits in the remaining window height, capped by the window width. It also:
+
+- tightens the header padding;
+- leaves room for Flickle's sticky footer ad when it's showing (nothing is
+  reserved if it's blocked);
+- hides the desktop sidebar ad rail only when the wider game leaves it no room;
+- opens the autocomplete list upwards, over the frame.
+
+It applies wherever a 16:9 frame sits above a guess input with suggestions
+(classic Movies/TV and the archive); other modes keep their normal layout.
+
+## Import / export
+
+The panel shows what this browser has (games finished per mode, watchlist
+size) and lets you:
 
 - **Export**: download the data as a JSON file, or copy it to the clipboard.
 - **Import**: pick an exported file (or paste it), then

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Flickle Tools
 // @namespace    anders.userscripts
-// @version      1.0.0
-// @description  Import/export your flickle.co history, stats and watchlist to move them between browsers.
+// @version      1.1.0
+// @description  Fullscreen game layout for flickle.co, plus import/export of your history, stats and watchlist.
 // @match        https://flickle.co/*
 // @match        https://www.flickle.co/*
 // @grant        none
@@ -169,6 +169,128 @@
   }
 
   // ---------------------------------------------------------------------
+  // Fullscreen layout
+  // ---------------------------------------------------------------------
+
+  // Not a `flickle_` key, so it stays out of exports.
+  const SETTINGS_KEY = "flickle-tools-settings";
+
+  function loadSettings() {
+    try {
+      return { fullscreen: true, ...JSON.parse(localStorage.getItem(SETTINGS_KEY)) };
+    } catch (_e) {
+      return { fullscreen: true };
+    }
+  }
+
+  function saveSettings(settings) {
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (_e) {}
+  }
+
+  const settings = loadSettings();
+
+  // Everything is scoped under html.ft-full so the toggle turns it all off.
+  // The game's width cap normally comes from .responsive-game-container
+  // (42–56rem); fitGame() replaces it with --ft-game-w, the width at which
+  // the 16:9 frame plus the controls under it exactly fill the viewport.
+  const LAYOUT_CSS = `
+    html.ft-full .responsive-game-container { max-width: var(--ft-game-w, 42rem) !important; }
+    html.ft-full main header { padding-top: 8px !important; padding-bottom: 6px !important; }
+    html.ft-full main header > div:first-child { margin-bottom: 6px !important; }
+    /* The desktop ad rail is laid out around the game column; hide it when
+       the wider game leaves no room for it beside the game. */
+    html.ft-full.ft-no-rail main > .fixed.inset-0.pointer-events-none { display: none !important; }
+    /* Open the autocomplete upwards, over the frame, instead of below the
+       input where it falls off the screen. */
+    html.ft-full div:has(> #autocomplete-results) {
+      top: auto !important; bottom: 100% !important;
+      margin-top: 0 !important; margin-bottom: 8px !important;
+    }
+    html.ft-full #autocomplete-results { max-height: var(--ft-ac-h, 20rem) !important; }
+  `;
+
+  // The classic-style game: a 16:9 frame above a guess input with an
+  // autocomplete list. Other modes (or pages) without both are left alone.
+  function gameParts() {
+    const input = document.querySelector('input[aria-autocomplete="list"]');
+    const container = input?.closest(".responsive-game-container");
+    const frame = container?.querySelector(".aspect-video");
+    return input && frame ? { input, container, frame } : null;
+  }
+
+  function setVar(name, value) {
+    const style = document.documentElement.style;
+    if (value === null) style.removeProperty(name);
+    else if (style.getPropertyValue(name) !== value) style.setProperty(name, value);
+  }
+
+  // Height covered by the site's sticky footer ad (fixed to the bottom of
+  // the viewport, loaded after the game), so the input isn't hidden under
+  // it. 0 when it's absent or blocked.
+  function bottomInset() {
+    let inset = 0;
+    for (const el of document.querySelectorAll(".adthrive-footer")) {
+      if (getComputedStyle(el).position !== "fixed") continue;
+      const r = el.getBoundingClientRect();
+      if (r.height > 0 && r.bottom >= window.innerHeight - 1) {
+        inset = Math.max(inset, window.innerHeight - r.top);
+      }
+    }
+    return inset;
+  }
+
+  function fitGame() {
+    const root = document.documentElement;
+    root.classList.toggle("ft-full", settings.fullscreen);
+    if (!settings.fullscreen) return;
+
+    const parts = gameParts();
+    if (!parts) {
+      // Keep the size while the game is on screen without its input (e.g.
+      // after finishing); reset on pages without a game frame.
+      if (!document.querySelector(".responsive-game-container .aspect-video")) {
+        setVar("--ft-game-w", null);
+        root.classList.remove("ft-no-rail");
+      }
+      return;
+    }
+    const { input, container, frame } = parts;
+    const f = frame.getBoundingClientRect();
+    const controls = (input.closest(".max-w-md") || input).getBoundingClientRect();
+    // Height of everything above the frame (header, tabs) and of the
+    // controls below it (frame buttons, progress bar, input). Neither depends
+    // on the frame's width, so this converges in one step.
+    const above = f.top + window.scrollY;
+    const below = controls.bottom - f.bottom;
+    const cs = getComputedStyle(container);
+    const padX = Number.parseFloat(cs.paddingLeft) + Number.parseFloat(cs.paddingRight);
+    const availH = window.innerHeight - bottomInset() - above - below - 12;
+    const frameW = Math.max(320, Math.min(window.innerWidth - padX, (availH * 16) / 9));
+    const width = Math.floor(frameW + padX);
+
+    setVar("--ft-game-w", `${width}px`);
+    root.classList.toggle("ft-no-rail", (window.innerWidth - width) / 2 < 320);
+    // Let the upward autocomplete use the space between the frame's top
+    // and the input.
+    const room = input.getBoundingClientRect().top - Math.max(f.top, 0) - 16;
+    setVar("--ft-ac-h", `${Math.max(160, Math.min(480, Math.floor(room)))}px`);
+  }
+
+  function initLayout() {
+    const style = document.createElement("style");
+    style.id = "flickle-tools-layout";
+    style.textContent = LAYOUT_CSS;
+    document.head.appendChild(style);
+    fitGame();
+    window.addEventListener("resize", fitGame);
+    // Polling covers the game loading in after hydration, client-side
+    // navigation between modes, and the controls changing as you play.
+    setInterval(fitGame, 500);
+  }
+
+  // ---------------------------------------------------------------------
   // Panel UI (in a shadow root so the site's Tailwind styles don't leak in)
   // ---------------------------------------------------------------------
 
@@ -213,6 +335,8 @@
     .btn.primary { background: #16a34a; border-color: #16a34a; color: #fff; }
     .btn.danger { border-color: #7f1d1d; color: #fca5a5; }
     input[type=file] { color: #d4d4d8; }
+    .check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+    .check input { margin-top: 3px; accent-color: #eab308; }
     textarea {
       width: 100%; min-height: 90px; resize: vertical; background: #000; color: #e4e4e7;
       border: 1px solid #3f3f46; border-radius: 6px; padding: 8px;
@@ -225,7 +349,8 @@
 
   const ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M7 10l5-5 5 5M12 5v10M5 19h14"/></svg>`;
+    <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/>
+    <circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>`;
 
   function summaryTable(rows) {
     if (!rows.length) return `<p class="note">No Flickle games recorded in this browser yet.</p>`;
@@ -245,6 +370,12 @@
   function renderBody() {
     const data = buildExport().data;
     return `
+      <div class="section">
+        <h3>Layout</h3>
+        <label class="check"><input type="checkbox" data-setting="fullscreen" ${
+          settings.fullscreen ? "checked" : ""
+        }> Fullscreen game: frame, guesses and input sized to fill the window, suggestions open over the frame</label>
+      </div>
       <div class="section">
         <h3>In this browser</h3>
         ${summaryTable(summarize(data))}
@@ -278,11 +409,11 @@
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `
       <style>${PANEL_CSS}</style>
-      <button class="fab" title="Flickle Tools: import / export" aria-label="Flickle Tools import and export">${ICON}</button>
+      <button class="fab" title="Flickle Tools" aria-label="Flickle Tools">${ICON}</button>
       <div class="backdrop">
         <div class="panel" role="dialog" aria-modal="true" aria-label="Flickle Tools">
           <div class="head">
-            <h2>Flickle data</h2>
+            <h2>Flickle Tools</h2>
             <button class="x" aria-label="Close">×</button>
           </div>
           <div class="body"></div>
@@ -371,11 +502,18 @@
 
     root.addEventListener("change", async (e) => {
       const input = e.target;
+      if (input instanceof HTMLInputElement && input.dataset.setting) {
+        settings[input.dataset.setting] = input.checked;
+        saveSettings(settings);
+        fitGame();
+        return;
+      }
       if (!(input instanceof HTMLInputElement) || input.type !== "file" || !input.files[0]) return;
       root.querySelector("textarea").value = await input.files[0].text();
       message(`Loaded ${input.files[0].name}. Choose Merge or Replace.`, true);
     });
   }
 
+  initLayout();
   mountPanel();
 })();
