@@ -8,11 +8,12 @@ Userscript for [flickle.co](https://www.flickle.co) that adds:
 - an **import / export** panel for moving your Flickle data between browsers
   or devices.
 
-A small settings button in the bottom-right corner opens the panel.
+A fullscreen button next to **SKIP** toggles the layout; a small upload-arrow
+button in the bottom-right corner opens the import / export panel.
 
 ## Fullscreen layout
 
-On by default; switch it off under **Layout** in the panel (remembered per
+On by default; toggle it with the button next to **SKIP** (remembered per
 browser). Flickle caps the game column at 42–56rem, so on a big screen the
 frame stays small and the input often ends up below the fold. The script
 instead hides the header and measures what's left above the frame and below
@@ -20,8 +21,8 @@ it (frame buttons, progress bar, input), and makes the 16:9 frame as large as
 fits in the remaining window height, capped by the window width. It also:
 
 - hides the header (logo, archive/stats/games/help buttons, Movies/TV tabs)
-  and the "Guess the movie" hint under the input; switch the layout off in the
-  panel to get them back;
+  and the "Guess the movie" hint under the input; toggle the layout off to get
+  them back;
 - leaves room for Flickle's sticky footer ad when it's showing (nothing is
   reserved if it's blocked);
 - hides the desktop sidebar ad rail only when the wider game leaves it no room;

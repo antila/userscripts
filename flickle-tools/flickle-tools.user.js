@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Flickle Tools
 // @namespace    anders.userscripts
-// @version      1.2.0
+// @version      1.3.0
 // @description  Fullscreen game layout for flickle.co, plus import/export of your history, stats and watchlist.
 // @match        https://flickle.co/*
 // @match        https://www.flickle.co/*
@@ -212,6 +212,12 @@
       margin-top: 0 !important; margin-bottom: 8px !important;
     }
     html.ft-full #autocomplete-results { max-height: var(--ft-ac-h, 20rem) !important; }
+    .ft-fs-btn {
+      background: rgba(24,24,27,.8) !important; color: #eab308 !important;
+      border-color: rgba(234,179,8,.5) !important;
+      display: inline-flex !important; align-items: center; justify-content: center;
+    }
+    .ft-fs-btn:hover { border-color: #eab308 !important; }
   `;
 
   // The classic-style game: a 16:9 frame above a guess input with an
@@ -281,16 +287,69 @@
     setVar("--ft-ac-h", `${Math.max(160, Math.min(480, Math.floor(room)))}px`);
   }
 
+  // Fullscreen toggle placed next to each SKIP button (Flickle renders one
+  // for desktop and one for mobile, one of them hidden by CSS). It borrows
+  // SKIP's classes for size and type, with its own quieter colors.
+  const EXPAND_ICON =
+    '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>';
+  const COLLAPSE_ICON =
+    '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>';
+
+  function toggleFullscreen() {
+    settings.fullscreen = !settings.fullscreen;
+    saveSettings(settings);
+    fitGame();
+    syncFullscreenButtons();
+  }
+
+  function syncFullscreenButtons() {
+    for (const skip of document.querySelectorAll("button")) {
+      if (skip.classList.contains("ft-fs-btn") || !/^SKIP\b/.test(skip.textContent.trim())) continue;
+      let btn = skip.previousElementSibling;
+      if (!btn?.classList.contains("ft-fs-btn")) {
+        btn = document.createElement("button");
+        btn.type = "button";
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleFullscreen();
+        });
+        skip.before(btn);
+      }
+      const label = settings.fullscreen ? "Exit fullscreen layout" : "Fullscreen layout";
+      const cls = `${skip.className} ft-fs-btn`;
+      if (btn.className !== cls) btn.className = cls;
+      if (btn.dataset.on !== String(settings.fullscreen)) {
+        btn.dataset.on = String(settings.fullscreen);
+        btn.title = label;
+        btn.setAttribute("aria-label", label);
+        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${
+            settings.fullscreen ? COLLAPSE_ICON : EXPAND_ICON
+          }</svg>`;
+      }
+      // Mobile SKIP is absolutely positioned at the row's right edge: sit
+      // just left of it. Desktop SKIP is in a flex row: a margin is enough.
+      const absolute = getComputedStyle(skip).position === "absolute";
+      btn.style.right = absolute ? `${skip.offsetWidth + 8}px` : "";
+      btn.style.marginRight = absolute ? "" : "8px";
+    }
+  }
+
   function initLayout() {
     const style = document.createElement("style");
     style.id = "flickle-tools-layout";
     style.textContent = LAYOUT_CSS;
     document.head.appendChild(style);
     fitGame();
+    syncFullscreenButtons();
     window.addEventListener("resize", fitGame);
     // Polling covers the game loading in after hydration, client-side
     // navigation between modes, and the controls changing as you play.
-    setInterval(fitGame, 500);
+    setInterval(() => {
+      fitGame();
+      syncFullscreenButtons();
+    }, 500);
   }
 
   // ---------------------------------------------------------------------
@@ -338,8 +397,6 @@
     .btn.primary { background: #16a34a; border-color: #16a34a; color: #fff; }
     .btn.danger { border-color: #7f1d1d; color: #fca5a5; }
     input[type=file] { color: #d4d4d8; }
-    .check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
-    .check input { margin-top: 3px; accent-color: #eab308; }
     textarea {
       width: 100%; min-height: 90px; resize: vertical; background: #000; color: #e4e4e7;
       border: 1px solid #3f3f46; border-radius: 6px; padding: 8px;
@@ -352,8 +409,7 @@
 
   const ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/>
-    <circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>`;
+    <path d="M7 10l5-5 5 5M12 5v10M5 19h14"/></svg>`;
 
   function summaryTable(rows) {
     if (!rows.length) return `<p class="note">No Flickle games recorded in this browser yet.</p>`;
@@ -373,12 +429,6 @@
   function renderBody() {
     const data = buildExport().data;
     return `
-      <div class="section">
-        <h3>Layout</h3>
-        <label class="check"><input type="checkbox" data-setting="fullscreen" ${
-          settings.fullscreen ? "checked" : ""
-        }> Fullscreen game: frame, guesses and input sized to fill the window, suggestions open over the frame</label>
-      </div>
       <div class="section">
         <h3>In this browser</h3>
         ${summaryTable(summarize(data))}
@@ -412,11 +462,11 @@
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `
       <style>${PANEL_CSS}</style>
-      <button class="fab" title="Flickle Tools" aria-label="Flickle Tools">${ICON}</button>
+      <button class="fab" title="Flickle Tools: import / export" aria-label="Flickle Tools import and export">${ICON}</button>
       <div class="backdrop">
         <div class="panel" role="dialog" aria-modal="true" aria-label="Flickle Tools">
           <div class="head">
-            <h2>Flickle Tools</h2>
+            <h2>Flickle data</h2>
             <button class="x" aria-label="Close">×</button>
           </div>
           <div class="body"></div>
@@ -505,12 +555,6 @@
 
     root.addEventListener("change", async (e) => {
       const input = e.target;
-      if (input instanceof HTMLInputElement && input.dataset.setting) {
-        settings[input.dataset.setting] = input.checked;
-        saveSettings(settings);
-        fitGame();
-        return;
-      }
       if (!(input instanceof HTMLInputElement) || input.type !== "file" || !input.files[0]) return;
       root.querySelector("textarea").value = await input.files[0].text();
       message(`Loaded ${input.files[0].name}. Choose Merge or Replace.`, true);
