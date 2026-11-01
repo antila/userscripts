@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Framed Archive Played Tracker
 // @namespace    anders.userscripts
-// @version      1.1.0
-// @description  Colors days on the framed.wtf archive pages (green = won, red = lost, amber = started), plus win/loss statistics and data import/export.
+// @version      1.2.0
+// @description  Colors days on the framed.wtf archive pages (green = won, red = lost, amber = started), plus a fullscreen game layout, win/loss statistics and data import/export.
 // @match        https://framed.wtf/*
 // @grant        none
 // @run-at       document-idle
@@ -838,6 +838,163 @@
     });
   }
 
+  // ---------------------------------------------------------------------
+  // Fullscreen layout
+  // ---------------------------------------------------------------------
+
+  // Kept apart from STORE_KEY so it never ends up in exports.
+  const SETTINGS_KEY = "framed-archive-played-settings";
+
+  function loadSettings() {
+    try {
+      return { fullscreen: true, ...JSON.parse(localStorage.getItem(SETTINGS_KEY)) };
+    } catch (_e) {
+      return { fullscreen: true };
+    }
+  }
+
+  const settings = loadSettings();
+
+  // Framed caps its column at 728px (970px on 2xl screens) and gives the
+  // frame box a fixed height (h-48 / sm:h-72 / 2xl:h-96, object-fit:
+  // contain). In fullscreen mode fitGame() marks the column and the frame
+  // box and sizes them through --fr-col-w / --fr-frame-h so the frame (at
+  // its own aspect ratio), the frame buttons and the guess input fill the
+  // window. Everything is scoped under html.fr-full.fr-game (game pages).
+  const LAYOUT_CSS = `
+    html.fr-full.fr-game .fr-col { max-width: var(--fr-col-w, 728px) !important; min-width: 0 !important; }
+    html.fr-full.fr-game .fr-frame-box, html.fr-full.fr-game .fr-frame-box > .relative {
+      height: var(--fr-frame-h, 18rem) !important;
+    }
+    /* The header (logo, games/archive/help links, menu button). */
+    html.fr-full.fr-game .fr-col header { display: none !important; }
+    /* The 320px ad columns either side of the game; hidden only when the
+       wider game leaves them no room. */
+    html.fr-full.fr-game.fr-no-rail .fr-rail { display: none !important; }
+    .fr-fs-btn {
+      flex: none; margin-left: 4px; padding: 0 10px; border-radius: 4px; cursor: pointer;
+      background: #0f172a; color: #cbd5e1; border: 1px solid #334155;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .fr-fs-btn:hover { color: #fff; border-color: #64748b; }
+  `;
+
+  // The classic-style game: a "movie frame" image in a black box above the
+  // guess form. Pages without both (archive grid, other layouts) are left
+  // alone.
+  function frameParts() {
+    const input = guessInput();
+    const img = [...document.querySelectorAll('img[alt="movie frame"]')].find(
+      (i) => i.offsetParent,
+    );
+    const box = img?.closest("div.bg-black");
+    const col = box?.closest("main")?.closest('[class*="max-w-[728px]"]');
+    return input?.form && box && col ? { input, img, box, col } : null;
+  }
+
+  function setVar(name, value) {
+    const style = document.documentElement.style;
+    if (value === null) style.removeProperty(name);
+    else if (style.getPropertyValue(name) !== value) style.setProperty(name, value);
+  }
+
+  // Width of one ad column (lg:min-w-[320px]) plus a little breathing room.
+  const RAIL_W = 336;
+
+  function fitGame() {
+    const root = document.documentElement;
+    root.classList.toggle("fr-full", settings.fullscreen);
+    if (!settings.fullscreen) return;
+
+    // Only game pages get the layout (the column persists across
+    // client-side navigation, e.g. to the archive grid).
+    const hasFrame = !!document.querySelector('img[alt="movie frame"]');
+    root.classList.toggle("fr-game", hasFrame);
+    const parts = frameParts();
+    if (!parts) {
+      // Keep the size while the frame is shown without the input (finished
+      // game); reset on pages with no frame.
+      if (!hasFrame) {
+        setVar("--fr-col-w", null);
+        setVar("--fr-frame-h", null);
+      }
+      return;
+    }
+    const { input, img, box, col } = parts;
+    col.classList.add("fr-col");
+    box.classList.add("fr-frame-box");
+    for (const sib of col.parentElement.children) {
+      if (sib !== col) sib.classList.add("fr-rail");
+    }
+
+    // Frames are mostly scope (~2.39:1) but vary; use the shown one's.
+    const aspect = img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 2.39;
+    const b = box.getBoundingClientRect();
+    const form = input.form.getBoundingClientRect();
+    // Space taken above the frame (title bar) and below it (frame buttons,
+    // input), and the column's horizontal padding around the frame. None of
+    // these depend on the frame's size, so one pass is enough.
+    const above = b.top + window.scrollY;
+    const below = form.bottom - b.bottom;
+    const dx = col.getBoundingClientRect().width - b.width;
+
+    const availH = window.innerHeight - above - below - 12;
+    const maxW = window.innerWidth - dx - 16;
+    let frameH = Math.max(160, availH);
+    let frameW = frameH * aspect;
+    if (frameW > maxW) {
+      frameW = maxW;
+      frameH = frameW / aspect;
+    }
+    const colW = Math.floor(frameW + dx);
+    setVar("--fr-col-w", `${colW}px`);
+    setVar("--fr-frame-h", `${Math.floor(frameH)}px`);
+    root.classList.toggle("fr-no-rail", (window.innerWidth - colW) / 2 < RAIL_W);
+  }
+
+  // Toggle button after SUBMIT (which is also framed's skip button).
+  const EXPAND_ICON = '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>';
+  const COLLAPSE_ICON = '<path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/>';
+
+  function syncFullscreenButton() {
+    const form = guessInput()?.form;
+    if (!form) return;
+    let btn = form.querySelector(".fr-fs-btn");
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "fr-fs-btn";
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        settings.fullscreen = !settings.fullscreen;
+        try {
+          localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+        } catch (_e) {}
+        fitGame();
+        syncFullscreenButton();
+      });
+      form.appendChild(btn);
+    }
+    if (btn.dataset.on === String(settings.fullscreen)) return;
+    btn.dataset.on = String(settings.fullscreen);
+    const label = settings.fullscreen ? "Exit fullscreen layout" : "Fullscreen layout";
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${
+        settings.fullscreen ? COLLAPSE_ICON : EXPAND_ICON
+      }</svg>`;
+  }
+
+  function initLayout() {
+    const style = document.createElement("style");
+    style.id = "fap-layout";
+    style.textContent = LAYOUT_CSS;
+    document.head.appendChild(style);
+    window.addEventListener("resize", fitGame);
+  }
+
   // Framed's slide-out menu stays open after navigating; when an archive
   // link inside it is clicked, click its X button (top-right of the drawer)
   // to close it. The drawer check also keeps the archive grid's day links
@@ -865,8 +1022,11 @@
     if (changed) saveStore(store);
     colorArchiveLinks(store);
     replayFinishedGame(store);
+    fitGame();
+    syncFullscreenButton();
   }
 
+  initLayout();
   mountPanel();
   tick();
   // Polling covers both live play (the DOM / gameData update after each

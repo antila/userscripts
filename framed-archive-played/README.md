@@ -23,6 +23,26 @@ A small chart button in the bottom-right corner opens a panel with:
   **Replace**. The export also carries framed's own `title-log`, so amber days
   and older wins' clue numbers come along too.
 
+## Fullscreen layout
+
+On game pages (daily and archive), a button next to **SUBMIT** toggles a
+fullscreen layout; it's on by default and remembered per browser. Framed caps
+its column at 728px (970px on very wide screens) and gives the frame a fixed
+height, so on a big screen the frame stays small. In fullscreen the script:
+
+- hides the header (logo, games/archive/help links, menu); the "FRAMED #n"
+  title bar stays;
+- measures what's left above the frame and below it (frame buttons, guess
+  input) and sizes the frame box at the frame's own aspect ratio to fill the
+  remaining window height, capped by the window width;
+- hides the 320px ad columns beside the game only when the wider game leaves
+  them no room.
+
+Framed's suggestion list already opens upward over the frame. The list of
+previous guesses and "N GUESSES REMAINING" sit below the input, just past the
+bottom of the window, so the frame doesn't shrink with every guess. Other
+pages (archive grid, etc.) keep framed's normal layout.
+
 ## Install
 
 1. Install a userscript manager in Firefox, e.g.
