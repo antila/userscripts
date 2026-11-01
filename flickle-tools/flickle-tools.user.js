@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Flickle Tools
 // @namespace    anders.userscripts
-// @version      1.1.0
+// @version      1.2.0
 // @description  Fullscreen game layout for flickle.co, plus import/export of your history, stats and watchlist.
 // @match        https://flickle.co/*
 // @match        https://www.flickle.co/*
@@ -197,8 +197,11 @@
   // the 16:9 frame plus the controls under it exactly fill the viewport.
   const LAYOUT_CSS = `
     html.ft-full .responsive-game-container { max-width: var(--ft-game-w, 42rem) !important; }
-    html.ft-full main header { padding-top: 8px !important; padding-bottom: 6px !important; }
-    html.ft-full main header > div:first-child { margin-bottom: 6px !important; }
+    /* Drop the header (logo, menu buttons, Movies/TV tabs) and the
+       "Guess the movie" hint under the input. Only the hint text: the same
+       row later holds a button on the right. */
+    html.ft-full main header { display: none !important; }
+    html.ft-full .max-w-md > div > p.uppercase.text-zinc-700 { display: none !important; }
     /* The desktop ad rail is laid out around the game column; hide it when
        the wider game leaves no room for it beside the game. */
     html.ft-full.ft-no-rail main > .fixed.inset-0.pointer-events-none { display: none !important; }

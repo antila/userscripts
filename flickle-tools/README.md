@@ -15,11 +15,13 @@ A small settings button in the bottom-right corner opens the panel.
 On by default; switch it off under **Layout** in the panel (remembered per
 browser). Flickle caps the game column at 42–56rem, so on a big screen the
 frame stays small and the input often ends up below the fold. The script
-instead measures what sits above the frame (header, Movies/TV tabs) and below
+instead hides the header and measures what's left above the frame and below
 it (frame buttons, progress bar, input), and makes the 16:9 frame as large as
 fits in the remaining window height, capped by the window width. It also:
 
-- tightens the header padding;
+- hides the header (logo, archive/stats/games/help buttons, Movies/TV tabs)
+  and the "Guess the movie" hint under the input; switch the layout off in the
+  panel to get them back;
 - leaves room for Flickle's sticky footer ad when it's showing (nothing is
   reserved if it's blocked);
 - hides the desktop sidebar ad rail only when the wider game leaves it no room;
